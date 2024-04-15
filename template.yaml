@@ -1,0 +1,22 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Image Compression Service
+Globals:
+  Api:
+    BinaryMediaTypes:
+      - "*~1*"
+Resources:
+  TicketWsCmiCallback:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: image-compressor
+      Runtime: go1.x
+      CodeUri: .
+      Events:
+        CallbackCMI:
+          Type: Api
+          Properties:
+            Path: /test
+            Method: post
+            BinaryMediaTypes:
+              - "multipart/form-data"
