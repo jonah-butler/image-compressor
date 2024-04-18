@@ -14,7 +14,5 @@ cmd:
 RUN DOCKER IMAGE
 -------------------
 cmd:
-  docker run -d -p 9000:8080 \                                         
-  --entrypoint /usr/local/bin/aws-lambda-rie \
-  docker-image_compressor:test ./main
+  docker run -d -p 9000:8080 --entrypoint /usr/local/bin/aws-lambda-rie docker-image_compressor:test ./main
 ------------------

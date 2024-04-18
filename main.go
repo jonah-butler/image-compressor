@@ -12,6 +12,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -138,6 +139,14 @@ func compressImage(buffer []byte, filename string) error {
 }
 
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+
+	currentDir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+	if err != nil {
+		panic(err)
+	}
+
+	os.Setenv("LD_LIBRARY_PATH", currentDir)
+
 	headers := convertToStandardHeader(request.Headers)
 
 	contentType := headers.Get("content-type")

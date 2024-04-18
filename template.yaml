@@ -9,9 +9,9 @@ Resources:
   TicketWsCmiCallback:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: image-compressor
-      Runtime: go1.x
-      CodeUri: .
+      Handler: main
+      Runtime: provided.al2023
+      CodeUri: ./myapp.zip
       Events:
         CallbackCMI:
           Type: Api
