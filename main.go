@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"mime"
@@ -24,7 +23,7 @@ const TEMP_UPLOADS_DIR = "temp_uploads"
 
 // typing ease helper
 func errorHandler(err error) (events.APIGatewayProxyResponse, error) {
-	return events.APIGatewayProxyResponse{StatusCode: 400}, err
+	return events.APIGatewayProxyResponse{StatusCode: 400, Body: err.Error()}, err
 }
 
 // simplifies getting content-type or other header data
@@ -120,22 +119,17 @@ func createFolder(dirname string) error {
 	return nil
 }
 
-func compressImage(buffer []byte, filename string) error {
+func compressImage(buffer []byte, filename string) ([]byte, error) {
 	processed, err := bimg.NewImage(buffer).Process(bimg.Options{
 		StripMetadata: true,
 		Palette:       true,
 		// Speed: 9, / /may not need this...
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	writeError := bimg.Write(fmt.Sprintf("./"+TEMP_UPLOADS_DIR+"/%s", filename), processed)
-	if writeError != nil {
-		return writeError
-	}
-
-	return nil
+	return processed, nil
 }
 
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -162,19 +156,52 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	}
 	log.Println("payload: ", payload)
 
-	errDir := createFolder("test_uploads")
-	if errDir != nil {
-		panic(errDir)
-	}
+	// errDir := createFolder("test_uploads")
+	// if errDir != nil {
+	// 	panic(errDir)
+	// }
 
-	err = compressImage(payload.Upload, "test1.png")
+	imageData, err := compressImage(payload.Upload, "test1.png")
 	if err != nil {
 		return errorHandler(err)
 	}
+	log.Println("got the image data!")
 
+	// img, _, err := image.Decode(bytes.NewReader(imageData))
+	// if err != nil {
+	// 	return errorHandler(err)
+	// }
+
+	// log.Println("decode the image!")
+
+	// var buf bytes.Buffer
+	// if err := png.Encode(&buf, img); err != nil {
+	// 	return errorHandler(err)
+	// }
+
+	// log.Println("encoded the image!")
+
+	// Set the headers
+	responseHeaders := map[string]string{
+		"Content-Type": "image/png",
+	}
+
+	// Encode the image data to base64
+	imageBase64 := base64.StdEncoding.EncodeToString(imageData)
+
+	log.Println("encoded to base64!")
+
+	// return events.APIGatewayProxyResponse{
+	// 	StatusCode: 200,
+	// 	Body:       "hmmmmmmmm",
+	// }, nil
+
+	// Return the response
 	return events.APIGatewayProxyResponse{
-		StatusCode: 200,
-		Body:       "hmmmmmmmm",
+		StatusCode:      http.StatusOK,
+		Headers:         responseHeaders,
+		Body:            imageBase64,
+		IsBase64Encoded: true,
 	}, nil
 }
 

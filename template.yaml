@@ -5,6 +5,9 @@ Globals:
   Api:
     BinaryMediaTypes:
       - "*~1*"
+  Function:
+    Timeout: 1000
+
 Resources:
   TicketWsCmiCallback:
     Type: AWS::Serverless::Function
