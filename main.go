@@ -108,17 +108,6 @@ func extractFormData(reader *multipart.Reader) (*LambdaPayload, error) {
 	return &lp, nil
 }
 
-func createFolder(dirname string) error {
-	_, err := os.Stat(dirname)
-	if os.IsNotExist(err) {
-		errDir := os.MkdirAll(dirname, 0755)
-		if errDir != nil {
-			return errDir
-		}
-	}
-	return nil
-}
-
 func compressImage(buffer []byte, filename string) ([]byte, error) {
 	processed, err := bimg.NewImage(buffer).Process(bimg.Options{
 		StripMetadata: true,
@@ -156,30 +145,11 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	}
 	log.Println("payload: ", payload)
 
-	// errDir := createFolder("test_uploads")
-	// if errDir != nil {
-	// 	panic(errDir)
-	// }
-
 	imageData, err := compressImage(payload.Upload, "test1.png")
 	if err != nil {
 		return errorHandler(err)
 	}
 	log.Println("got the image data!")
-
-	// img, _, err := image.Decode(bytes.NewReader(imageData))
-	// if err != nil {
-	// 	return errorHandler(err)
-	// }
-
-	// log.Println("decode the image!")
-
-	// var buf bytes.Buffer
-	// if err := png.Encode(&buf, img); err != nil {
-	// 	return errorHandler(err)
-	// }
-
-	// log.Println("encoded the image!")
 
 	// Set the headers
 	responseHeaders := map[string]string{
@@ -190,11 +160,6 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	imageBase64 := base64.StdEncoding.EncodeToString(imageData)
 
 	log.Println("encoded to base64!")
-
-	// return events.APIGatewayProxyResponse{
-	// 	StatusCode: 200,
-	// 	Body:       "hmmmmmmmm",
-	// }, nil
 
 	// Return the response
 	return events.APIGatewayProxyResponse{

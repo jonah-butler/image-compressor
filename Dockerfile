@@ -10,53 +10,49 @@ COPY main.go ./
 COPY ./bootstrap ./
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libvips-dev zip\
+    libvips-dev zip \
     && rm -rf /var/lib/apt/lists/*
 
-# # Build the Go binary
+# Build the Go binary
 RUN GOOS=linux GOARCH=amd64 go build -tags lambda.norpc -o main main.go
 
 # Create a directory to hold the shared libraries
-RUN mkdir myapp
+RUN mkdir image-compressor
 
+# Copy each libvips dependency into application root
 RUN root_val="/usr"
 RUN DEPENDENCIES=$(ldd /usr/lib/x86_64-linux-gnu/libvips.so.42 | awk '/=>/ {print $3}') \
     && for dep in $DEPENDENCIES; do \
         depen_loc=$root_val$dep; \
-        cp $depen_loc ./myapp; \
+        cp $depen_loc ./image-compressor; \
     done
-RUN cp /usr/lib/x86_64-linux-gnu/libvips.so.42 ./myapp
-# # Copy the shared libraries into the libs directory
-# RUN cp -r /usr/lib/x86_64-linux-gnu/* ./libs/
-# # COPY --from=build /usr/lib/x86_64-linux-gnu/* ./libs/
-# # You may need to adjust the path depending on the location of the libraries
+
+# Copy libvips into application root
+RUN cp /usr/lib/x86_64-linux-gnu/libvips.so.42 ./image-compressor
 
 # Create the directory structure for the ZIP archive
-RUN mv main myapp/
-RUN mv bootstrap myapp/
-# RUN mv libs myapp/
+RUN mv main image-compressor/
+RUN mv bootstrap image-compressor/
 
 # # Change the working directory to the parent directory
-WORKDIR /app/myapp
+WORKDIR /app/image-compressor
 
 # # Create the ZIP archive
-RUN zip -r myapp.zip .
+RUN zip -r image-compressor.zip .
+
+RUN chmod +x /app/image-compressor/image-compressor.zip
 
 # Use a minimal base image for the Lambda function
 FROM public.ecr.aws/lambda/provided:latest
-# FROM amazonlinux:2
 
-# # Install any necessary dependencies
-# RUN yum install -y curl
-
-# Download the AWS Lambda RIE binary
-# RUN curl -Lo /usr/local/bin/aws-lambda-rie https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/latest/download/aws-lambda-rie
-
-# Make the binary executable
+# Ensure execution
 RUN chmod +x /usr/local/bin/aws-lambda-rie
+# RUN chmod +x ./bootstrap
 
 # Copy the ZIP archive from the build stage
-COPY --from=build /app/myapp/myapp.zip .
+COPY --from=build /app/image-compressor/image-compressor.zip .
+
+# WORKDIR /var/task
 
 # Set the command to run the Lambda function
-CMD ["./main"]
+CMD ["./bootstrap"]
