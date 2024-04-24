@@ -19,9 +19,13 @@ import (
 	"github.com/h2non/bimg"
 )
 
-const TEMP_UPLOADS_DIR = "temp_uploads"
+const MAX_LAMBDA_RETURN_SIZE = 6 // in mb
+const NUM_OF_BYTES_IN_MB = 1048576.0
 
-// typing ease helper
+type LambdaPayload struct {
+	Upload []byte // <upload>
+}
+
 func errorHandler(err error) (events.APIGatewayProxyResponse, error) {
 	return events.APIGatewayProxyResponse{StatusCode: 400, Body: err.Error()}, err
 }
@@ -35,6 +39,14 @@ func convertToStandardHeader(header map[string]string) http.Header {
 	return h
 }
 
+/*
+Manual parsing of multipart/form-data fields since .ParseForm isn't available.
+-> validate type of body, ensure it includes multipart fields
+-> ensure header data is accurate and trimmed
+-> extract boundary identifier
+-> if b64 encoded, decode body first
+-> return decoded multipart.Reader
+*/
 func decodeRequestBody(request events.APIGatewayProxyRequest, contentType string) (*multipart.Reader, error) {
 	mediatype, params, err := mime.ParseMediaType(contentType)
 	if err != nil {
@@ -64,12 +76,13 @@ func decodeRequestBody(request events.APIGatewayProxyRequest, contentType string
 
 }
 
-type LambdaPayload struct {
-	UploadPath string
-	UploadTags string
-	Upload     []byte
+// Max return size of a lambda payload is 6mb.
+// Returns boolean based on newly compressed size to determine if response will be successful.
+func isAcceptableSizeLimit(imageSize int) bool {
+	return (float64(imageSize) / NUM_OF_BYTES_IN_MB) <= MAX_LAMBDA_RETURN_SIZE
 }
 
+// Parses form-data fields
 func extractFormData(reader *multipart.Reader) (*LambdaPayload, error) {
 	lp := LambdaPayload{}
 
@@ -89,30 +102,16 @@ func extractFormData(reader *multipart.Reader) (*LambdaPayload, error) {
 			}
 			lp.Upload = file
 
-		} else {
-
-			content, err := io.ReadAll(part)
-			if err != nil {
-				return nil, err
-			}
-
-			if part.FormName() == "upload-path" {
-				lp.UploadPath = string(content)
-			} else if part.FormName() == "upload-tags" {
-				lp.UploadTags = string(content)
-			}
-
 		}
 	}
 
 	return &lp, nil
 }
 
-func compressImage(buffer []byte, filename string) ([]byte, error) {
+func compressImage(buffer []byte) ([]byte, error) {
 	processed, err := bimg.NewImage(buffer).Process(bimg.Options{
 		StripMetadata: true,
 		Palette:       true,
-		// Speed: 9, / /may not need this...
 	})
 	if err != nil {
 		return nil, err
@@ -121,13 +120,30 @@ func compressImage(buffer []byte, filename string) ([]byte, error) {
 	return processed, nil
 }
 
+func validateFileMime(buffer []byte) bool {
+	acceptedMimeTypes := []string{"image/png", "image/jpeg"} // just two for now
+
+	mime := http.DetectContentType(buffer)
+
+	isValid := false
+
+	for _, mimeType := range acceptedMimeTypes {
+		if mimeType == mime {
+			isValid = true
+			break
+		}
+	}
+
+	return isValid
+}
+
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 
 	currentDir, err := filepath.Abs(filepath.Dir(os.Args[0]))
 	if err != nil {
+		log.Println("failed to retrieve file path")
 		panic(err)
 	}
-
 	os.Setenv("LD_LIBRARY_PATH", currentDir)
 
 	headers := convertToStandardHeader(request.Headers)
@@ -136,32 +152,40 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	reader, err := decodeRequestBody(request, contentType)
 	if err != nil {
+		log.Println("failed to decode request body")
 		return errorHandler(err)
 	}
 
 	payload, err := extractFormData(reader)
 	if err != nil {
+		log.Println("failed to extract form data")
 		return errorHandler(err)
 	}
-	log.Println("payload: ", payload)
 
-	imageData, err := compressImage(payload.Upload, "test1.png")
+	isValidMime := validateFileMime(payload.Upload)
+	if !isValidMime {
+		log.Println("upload is invalid type")
+		return errorHandler(errors.New("invalid file type"))
+	}
+
+	imageData, err := compressImage(payload.Upload)
 	if err != nil {
+		log.Println("failed to compress image")
 		return errorHandler(err)
 	}
-	log.Println("got the image data!")
 
-	// Set the headers
-	responseHeaders := map[string]string{
-		"Content-Type": "image/png",
+	sizeIsOk := isAcceptableSizeLimit(len(imageData))
+	if !sizeIsOk {
+		log.Println("compressed image exceeds 6mb")
+		return errorHandler(errors.New("image size exceeded - can not process request"))
 	}
 
-	// Encode the image data to base64
+	responseHeaders := map[string]string{
+		"Content-Type": http.DetectContentType(imageData),
+	}
+
 	imageBase64 := base64.StdEncoding.EncodeToString(imageData)
 
-	log.Println("encoded to base64!")
-
-	// Return the response
 	return events.APIGatewayProxyResponse{
 		StatusCode:      http.StatusOK,
 		Headers:         responseHeaders,

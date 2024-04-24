@@ -14,7 +14,7 @@ Resources:
     Properties:
       Handler: main
       Runtime: provided.al2023
-      CodeUri: ./myapp.zip
+      CodeUri: ./image-compressor.zip
       Events:
         CallbackCMI:
           Type: Api

@@ -47,12 +47,9 @@ FROM public.ecr.aws/lambda/provided:latest
 
 # Ensure execution
 RUN chmod +x /usr/local/bin/aws-lambda-rie
-# RUN chmod +x ./bootstrap
 
 # Copy the ZIP archive from the build stage
 COPY --from=build /app/image-compressor/image-compressor.zip .
-
-# WORKDIR /var/task
 
 # Set the command to run the Lambda function
 CMD ["./bootstrap"]
